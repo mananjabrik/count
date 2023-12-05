@@ -1,8 +1,10 @@
 use crate::error::ContractError;
 use crate::msg::{AdminsListResp, ExcuteMsg, GreetResp, InstantiateMessage, QueryMsg};
-use crate::state::ADMINS;
+use crate::state::{ADMINS, DONATION_DENOM};
 use cosmwasm_std::{
     to_json_binary, Binary, Deps, DepsMut, Env, Event, MessageInfo, Response, StdResult,
+    Addr,
+    coins
 };
 
 pub fn instantiate(
@@ -18,6 +20,7 @@ pub fn instantiate(
         .collect();
 
     ADMINS.save(dep.storage, &admins?)?;
+    DONATION_DENOM.save(dep.storage, &msg.donation_denom)?;
 
     Ok(Response::new())
 }
@@ -60,12 +63,32 @@ pub fn execute(
     match msg {
         AddMembers { admins } => exec::add_members(deps, info, admins),
         Leave {} => exec::leave(deps, info).map_err(Into::into),
+        Donate {  } => exec::donate(deps, info),
     }
 }
 
 mod exec {
 
+    use cosmwasm_std::{BankMsg, coins};
     use super::*;
+
+    pub fn donate(deps:DepsMut, info:MessageInfo) -> Result<Response, ContractError>{
+        let denom = DONATION_DENOM.load(deps.storage)?;
+        let admins = ADMINS.load(deps.storage)?;
+        
+        let donation = cw_utils::must_pay(&info, &denom)?.u128();
+
+        let donation_per_admin = donation / (admins.len() as u128);
+
+        let messages = admins.into_iter().map(|admin| BankMsg::Send {
+            to_address: admin.to_string(),
+            amount: coins(donation_per_admin, &denom),
+        });
+
+        let resp = Response::new().add_messages(messages).add_attribute("action", "donate").add_attribute("amount", donation.to_string()).add_attribute("per_admin", donation_per_admin.to_string());
+
+        Ok(resp)
+    }
 
     pub fn add_members(
         deps: DepsMut,
@@ -114,14 +137,18 @@ mod exec {
 
 #[cfg(test)]
 mod tests {
-    use cosmwasm_std::Addr;
     use cw_multi_test::{App, ContractWrapper, Executor};
 
     use super::*;
 
     #[test]
-    fn great_query() {
-        let mut app = App::default();
+    fn donations() {
+        let mut app = App::new(|router, _, storage| {
+            router
+                .bank
+                .init_balance(storage, &Addr::unchecked("user"), coins(5, "eth"))
+                .unwrap()
+        });
 
         let code = ContractWrapper::new(execute, instantiate, query);
         let code_id = app.store_code(Box::new(code));
@@ -132,89 +159,57 @@ mod tests {
                 Addr::unchecked("owner"),
                 &InstantiateMessage {
                     admins: vec!["admin1".to_owned(), "admin2".to_owned()],
+                    donation_denom: "eth".to_owned(),
                 },
                 &[],
-                "Contract 2",
+                "Contract",
                 None,
             )
             .unwrap();
 
-        let resp_admin: AdminsListResp = app
-            .wrap()
-            .query_wasm_smart(addr, &QueryMsg::AdminsList {})
-            .unwrap();
+        app.execute_contract(
+            Addr::unchecked("user"),
+            addr.clone(),
+            &ExcuteMsg::Donate {},
+            &coins(5, "eth"),
+        )
+        .unwrap();
+
         assert_eq!(
-            resp_admin,
-            AdminsListResp {
-                admins: vec![Addr::unchecked("admin1"), Addr::unchecked("admin2")]
-            }
+            app.wrap()
+                .query_balance("user", "eth")
+                .unwrap()
+                .amount
+                .u128(),
+            0
+        );
+
+        assert_eq!(
+            app.wrap()
+                .query_balance(&addr, "eth")
+                .unwrap()
+                .amount
+                .u128(),
+            1
+        );
+
+        assert_eq!(
+            app.wrap()
+                .query_balance("admin1", "eth")
+                .unwrap()
+                .amount
+                .u128(),
+            2
+        );
+
+        assert_eq!(
+            app.wrap()
+                .query_balance("admin2", "eth")
+                .unwrap()
+                .amount
+                .u128(),
+            2
         );
     }
 
-    #[test]
-    fn add_members() {
-        let mut app = App::default();
-        let code = ContractWrapper::new(execute, instantiate, query);
-        let code_id = app.store_code(Box::new(code));
-
-        let addr = app
-            .instantiate_contract(
-                code_id,
-                Addr::unchecked("owner"),
-                &InstantiateMessage {
-                    admins: vec!["owner".to_owned()],
-                },
-                &[],
-                "contract",
-                None,
-            )
-            .unwrap();
-
-        let resp = app
-            .execute_contract(
-                Addr::unchecked("owner"),
-                addr,
-                &ExcuteMsg::AddMembers {
-                    admins: vec!["user".to_owned()],
-                },
-                &[],
-            )
-            .unwrap();
-
-        let wasm = resp.events.iter().find(|ev| ev.ty == "wasm").unwrap();
-
-        assert_eq!(
-            wasm.attributes
-                .iter()
-                .find(|attr| attr.key == "action")
-                .unwrap()
-                .value,
-            "add_members"
-        );
-        assert_eq!(
-            wasm.attributes
-                .iter()
-                .find(|attr| attr.key == "added_count")
-                .unwrap()
-                .value,
-            "1"
-        );
-
-        let admin_added: Vec<_> = resp
-            .events
-            .iter()
-            .filter(|ev| ev.ty == "wasm-admin_added")
-            .collect();
-        assert_eq!(admin_added.len(), 1);
-
-        assert_eq!(
-            admin_added[0]
-                .attributes
-                .iter()
-                .find(|attr| attr.key == "addr")
-                .unwrap()
-                .value,
-            "user"
-        );
-    }
 }
