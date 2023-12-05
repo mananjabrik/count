@@ -10,6 +10,12 @@ pub enum QueryMsg {
     AdminsList {},
 }
 
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub enum ExcuteMsg {
+    AddMembers { admins: Vec<String>},
+    Leave {},
+}
+
 #[derive(Serialize, Deserialize,  PartialEq, Debug, Clone)]
 pub struct GreetResp{
     pub message:String,
