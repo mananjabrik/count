@@ -9,15 +9,17 @@ use cosmwasm_std::{
     Response, 
     StdResult, 
 };
+use msg::InstantiateMessage;
 mod contract;
 mod msg;
+mod state;
 
 #[entry_point]
 pub fn instantiate(
     deps:DepsMut, 
     env:Env, 
     info: MessageInfo, 
-    msg: Empty
+    msg: InstantiateMessage
     )-> StdResult<Response> {
     contract::instantiate(deps, env, info, msg)
 }
