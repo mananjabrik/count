@@ -10,10 +10,11 @@ use cosmwasm_std::{
 };
 use error::ContractError;
 use msg::{InstantiateMessage, ExcuteMsg};
-mod contract;
-mod msg;
-mod state;
-mod error;
+
+pub mod contract;
+pub mod msg;
+pub mod state;
+pub mod error;
 
 #[entry_point]
 pub fn instantiate(

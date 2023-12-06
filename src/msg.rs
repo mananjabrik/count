@@ -1,34 +1,34 @@
 use cosmwasm_std::Addr;
-use serde::{
-    Deserialize, 
-    Serialize, 
-};
 
-#[derive(Serialize, Deserialize,  PartialEq, Debug, Clone)]
+use cosmwasm_schema::{cw_serde, QueryResponses};
+
+#[cw_serde]
+#[derive(QueryResponses)]
 pub enum QueryMsg {
+    #[returns(GreetResp)]
     Greet {},
+    #[returns(AdminsListResp)]
     AdminsList {},
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cw_serde]
 pub struct InstantiateMessage{
     pub admins:Vec<String>,
     pub donation_denom:String,
 }
-
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[cw_serde]
 pub enum ExcuteMsg {
     AddMembers { admins: Vec<String>},
     Leave {},
     Donate {}, 
 }
 
-#[derive(Serialize, Deserialize,  PartialEq, Debug, Clone)]
+
+#[cw_serde]
 pub struct GreetResp{
     pub message:String,
 }
-
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[cw_serde]
 pub struct AdminsListResp  {
     pub admins: Vec<Addr>,
 }
