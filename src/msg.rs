@@ -1,4 +1,4 @@
-use cosmwasm_std::Addr;
+use cosmwasm_std::{Addr};
 
 use cosmwasm_schema::{cw_serde, QueryResponses};
 
@@ -9,6 +9,8 @@ pub enum QueryMsg {
     Greet {},
     #[returns(AdminsListResp)]
     AdminsList {},
+    #[returns(CountResp)]
+    Count {}
 }
 
 #[cw_serde]
@@ -20,10 +22,11 @@ pub struct InstantiateMessage{
 pub enum ExcuteMsg {
     AddMembers { admins: Vec<String>},
     Leave {},
-    Donate {}, 
+    Donate {},
+    Increment {}, 
 }
 
-
+// response json 
 #[cw_serde]
 pub struct GreetResp{
     pub message:String,
@@ -31,4 +34,9 @@ pub struct GreetResp{
 #[cw_serde]
 pub struct AdminsListResp  {
     pub admins: Vec<Addr>,
+}
+
+#[cw_serde]
+pub struct CountResp{
+    pub value: u128,
 }

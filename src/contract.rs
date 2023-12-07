@@ -1,6 +1,6 @@
 use crate::error::ContractError;
-use crate::msg::{AdminsListResp, ExcuteMsg, GreetResp, InstantiateMessage, QueryMsg};
-use crate::state::{ADMINS, DONATION_DENOM};
+use crate::msg::{AdminsListResp, ExcuteMsg, GreetResp, InstantiateMessage, QueryMsg, CountResp};
+use crate::state::{ADMINS, DONATION_DENOM, COUNT};
 use cosmwasm_std::{
     to_json_binary, Binary, Deps, DepsMut, Env, Event, MessageInfo, Response, StdResult,
     Addr,
@@ -22,6 +22,8 @@ pub fn instantiate(
     ADMINS.save(dep.storage, &admins?)?;
     DONATION_DENOM.save(dep.storage, &msg.donation_denom)?;
 
+    COUNT.save(dep.storage, &1 )?;
+
     Ok(Response::new())
 }
 
@@ -31,9 +33,12 @@ pub fn query(dep: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         Greet {} => to_json_binary(&query::greet()?),
         AdminsList {} => to_json_binary(&query::admin_lists(dep)?),
+        Count {} => to_json_binary(&query::get_number(dep)?)
     }
 }
 mod query {
+    use crate::state::COUNT;
+
     use super::*;
 
     pub fn greet() -> StdResult<GreetResp> {
@@ -49,6 +54,12 @@ mod query {
         let resp = AdminsListResp { admins };
         Ok(resp)
     }
+
+    pub fn get_number(deps:Deps) -> StdResult<CountResp> {
+        let value = COUNT.load(deps.storage)?;
+        let res = CountResp { value };
+        Ok(res)
+    }
 }
 
 #[allow(dead_code)]
@@ -63,11 +74,13 @@ pub fn execute(
     match msg {
         AddMembers { admins } => exec::add_members(deps, info, admins),
         Leave {} => exec::leave(deps, info).map_err(Into::into),
-        Donate {  } => exec::donate(deps, info),
+        Donate {} => exec::donate(deps, info),
+        Increment {} => exec::increment(deps)
     }
 }
 
 mod exec {
+    use std::ops::Add;
 
     use cosmwasm_std::{BankMsg, coins};
     use super::*;
@@ -132,6 +145,12 @@ mod exec {
         })?;
 
         Ok(Response::new())
+    }
+
+    pub fn increment(deps:DepsMut) -> Result<Response, ContractError>{
+       let mut current =  COUNT.load(deps.storage)?;
+       COUNT.save(deps.storage, &current.add(1))?;
+       Ok(Response::new())
     }
 }
 
@@ -210,6 +229,15 @@ mod tests {
                 .u128(),
             2
         );
+
+        let get_number: CountResp = app.wrap().query_wasm_smart(addr.clone(), &QueryMsg::Count {}).unwrap();
+        assert_eq!(get_number.value, 1);
+
+        app.execute_contract(Addr::unchecked("owner"), addr.clone(), &ExcuteMsg::Increment {}, &[]).unwrap();
+
+        let get_number2: CountResp = app.wrap().query_wasm_smart(addr.clone(), &QueryMsg::Count {}).unwrap();
+        assert_eq!(get_number2.value, 2);
+    
     }
 
 }
